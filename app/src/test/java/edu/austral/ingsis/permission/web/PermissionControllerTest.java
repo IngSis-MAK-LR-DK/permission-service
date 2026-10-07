@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -15,6 +16,7 @@ import java.util.List;
 import edu.austral.ingsis.permission.exception.AlreadyExistsException;
 import edu.austral.ingsis.permission.exception.ForbiddenOperationException;
 import edu.austral.ingsis.permission.model.Role;
+import edu.austral.ingsis.permission.security.SecurityConfig;
 import edu.austral.ingsis.permission.service.PermissionService;
 import edu.austral.ingsis.permission.service.Relation;
 import edu.austral.ingsis.permission.service.SnippetAccess;
@@ -24,25 +26,28 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(PermissionController.class)
-@Import(HeaderCurrentUser.class)
+@Import({SecurityConfig.class, JwtCurrentUser.class})
 class PermissionControllerTest {
 
-    private static final String USER_HEADER = "X-User-Id";
     private static final String USER = "auth0|ana";
 
     @Autowired private MockMvc mockMvc;
 
     @MockitoBean private PermissionService service;
 
+    @MockitoBean private JwtDecoder jwtDecoder;
+
     @Test
     void registerOwnerReturnsCreated() throws Exception {
         mockMvc.perform(
                         post("/permissions")
-                                .header(USER_HEADER, USER)
+                                .with(asUser(USER))
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"snippetId\":\"s1\"}"))
                 .andExpect(status().isCreated());
@@ -54,7 +59,7 @@ class PermissionControllerTest {
     void registerOwnerWithBlankSnippetIdIsBadRequest() throws Exception {
         mockMvc.perform(
                         post("/permissions")
-                                .header(USER_HEADER, USER)
+                                .with(asUser(USER))
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"snippetId\":\" \"}"))
                 .andExpect(status().isBadRequest());
@@ -66,7 +71,7 @@ class PermissionControllerTest {
 
         mockMvc.perform(
                         post("/permissions")
-                                .header(USER_HEADER, USER)
+                                .with(asUser(USER))
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"snippetId\":\"s1\"}"))
                 .andExpect(status().isConflict())
@@ -74,7 +79,7 @@ class PermissionControllerTest {
     }
 
     @Test
-    void missingUserHeaderReturns401() throws Exception {
+    void missingTokenReturns401() throws Exception {
         mockMvc.perform(get("/permissions/s1")).andExpect(status().isUnauthorized());
     }
 
@@ -82,7 +87,7 @@ class PermissionControllerTest {
     void shareReturnsNoContent() throws Exception {
         mockMvc.perform(
                         post("/permissions/s1/share")
-                                .header(USER_HEADER, USER)
+                                .with(asUser(USER))
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"userId\":\"auth0|beto\"}"))
                 .andExpect(status().isNoContent());
@@ -98,7 +103,7 @@ class PermissionControllerTest {
 
         mockMvc.perform(
                         post("/permissions/s1/share")
-                                .header(USER_HEADER, USER)
+                                .with(asUser(USER))
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"userId\":\"auth0|beto\"}"))
                 .andExpect(status().isForbidden());
@@ -109,10 +114,7 @@ class PermissionControllerTest {
         when(service.listSnippets(USER, Relation.SHARED))
                 .thenReturn(List.of(new SnippetAccess("s1", Role.READER)));
 
-        mockMvc.perform(
-                        get("/permissions/snippets")
-                                .param("relation", "shared")
-                                .header(USER_HEADER, USER))
+        mockMvc.perform(get("/permissions/snippets").param("relation", "shared").with(asUser(USER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].snippetId").value("s1"))
                 .andExpect(jsonPath("$[0].role").value("READER"));
@@ -122,17 +124,14 @@ class PermissionControllerTest {
     void listSnippetsDefaultsToAll() throws Exception {
         when(service.listSnippets(USER, Relation.ALL)).thenReturn(List.of());
 
-        mockMvc.perform(get("/permissions/snippets").header(USER_HEADER, USER))
+        mockMvc.perform(get("/permissions/snippets").with(asUser(USER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isEmpty());
     }
 
     @Test
     void listSnippetsWithInvalidRelationReturns400() throws Exception {
-        mockMvc.perform(
-                        get("/permissions/snippets")
-                                .param("relation", "nope")
-                                .header(USER_HEADER, USER))
+        mockMvc.perform(get("/permissions/snippets").param("relation", "nope").with(asUser(USER)))
                 .andExpect(status().isBadRequest());
     }
 
@@ -140,14 +139,14 @@ class PermissionControllerTest {
     void roleOfReturnsRole() throws Exception {
         when(service.roleOf("s1", USER)).thenReturn(Role.OWNER);
 
-        mockMvc.perform(get("/permissions/s1").header(USER_HEADER, USER))
+        mockMvc.perform(get("/permissions/s1").with(asUser(USER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("OWNER"));
     }
 
     @Test
     void deleteReturnsNoContent() throws Exception {
-        mockMvc.perform(delete("/permissions/s1").header(USER_HEADER, USER))
+        mockMvc.perform(delete("/permissions/s1").with(asUser(USER)))
                 .andExpect(status().isNoContent());
 
         verify(service).deleteSnippet("s1", USER);
@@ -159,7 +158,11 @@ class PermissionControllerTest {
                 .when(service)
                 .deleteSnippet(any(), any());
 
-        mockMvc.perform(delete("/permissions/s1").header(USER_HEADER, USER))
+        mockMvc.perform(delete("/permissions/s1").with(asUser(USER)))
                 .andExpect(status().isForbidden());
+    }
+
+    private static JwtRequestPostProcessor asUser(String userId) {
+        return jwt().jwt(token -> token.subject(userId));
     }
 }
