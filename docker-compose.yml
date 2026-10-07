@@ -1,0 +1,42 @@
+services:
+  permission-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${DB_PORT}:5432"
+    volumes:
+      - permission-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  permission-service:
+    build:
+      context: .
+      secrets:
+        - gpr_user
+        - gpr_key
+    # El host de la base es el nombre del servicio (permission-db), no localhost.
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://permission-db:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${SERVICE_PORT}:8080"
+    depends_on:
+      permission-db:
+        condition: service_healthy
+
+volumes:
+  permission-db-data:
+
+secrets:
+  gpr_user:
+    environment: GPR_USER
+  gpr_key:
+    environment: GPR_KEY
