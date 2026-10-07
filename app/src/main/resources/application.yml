@@ -5,6 +5,16 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5434/permission}
     username: ${SPRING_DATASOURCE_USERNAME:permission}
     password: ${SPRING_DATASOURCE_PASSWORD:permission}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Quien emite los tokens: URL completa del tenant de Auth0, CON la barra final.
+          issuer-uri: ${AUTH_SERVER_URI}
   jpa:
     hibernate:
       ddl-auto: validate
+
+auth0:
+  # "Identifier" de la API creada en Auth0: el token tiene que haber sido pedido para esta API.
+  audience: ${AUTH0_AUDIENCE}
