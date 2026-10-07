@@ -1,0 +1,10 @@
+spring:
+  application:
+    name: permission-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5434/permission}
+    username: ${SPRING_DATASOURCE_USERNAME:permission}
+    password: ${SPRING_DATASOURCE_PASSWORD:permission}
+  jpa:
+    hibernate:
+      ddl-auto: update
