@@ -1,12 +1,9 @@
 plugins {
     // Reglas del equipo (spotless, checkstyle, JUnit 5, JaCoCo >= 80%, Java 21) desde ci-kit.
-    id("edu.austral.ingsis.java-conventions") version "1.0.0"
+    id("edu.austral.ingsis.java-conventions") version "1.0.1"
     id("org.springframework.boot") version "3.5.0"
     id("io.spring.dependency-management") version "1.1.7"
 }
-
-// ci-kit fija JUnit 5.10.3; sin esto el BOM de Spring Boot sube la plataforma y los tests no corren.
-extra["junit-jupiter.version"] = "5.10.3"
 
 // El Testcontainers que trae el BOM de Spring Boot es incompatible con Docker 29+ (API minima 1.40).
 extra["testcontainers.version"] = "1.21.4"
