@@ -52,3 +52,15 @@ tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
         files(classDirectories.files.map { fileTree(it) { exclude(jacocoExcludes) } }),
     )
 }
+
+// bootRun corre desde la raiz del repo, donde esta el .env que lee spring.config.import.
+tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
+    workingDir = rootProject.projectDir
+}
+
+// Los tests corren en UTC, sin importar la zona horaria de la maquina. El driver de Postgres le
+// manda a la base la zona de la JVM, y algunas (como "America/Buenos_Aires", que Windows usa para
+// "Argentina Standard Time") son alias viejos que la imagen postgres:16 ya no acepta.
+tasks.withType<Test>().configureEach {
+    systemProperty("user.timezone", "UTC")
+}
