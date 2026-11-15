@@ -1,5 +1,7 @@
 package edu.austral.ingsis.permission.security;
 
+import edu.austral.ingsis.permission.observability.UserMdcFilter;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -7,6 +9,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
@@ -33,7 +36,9 @@ public class SecurityConfig {
                 // CSRF depende de que el browser mande cookies solo; un bearer token no viaja asi.
                 .csrf(AbstractHttpConfigurer::disable)
                 // Solo lo llama el handler (no un browser de otro origen): CORS no hace falta.
-                .cors(AbstractHttpConfigurer::disable);
+                .cors(AbstractHttpConfigurer::disable)
+                // Los logs llevan quien hace el pedido: se agrega apenas el token se autentica.
+                .addFilterAfter(new UserMdcFilter(), BearerTokenAuthenticationFilter.class);
         return http.build();
     }
 }
