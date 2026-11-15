@@ -10,11 +10,19 @@ import edu.austral.ingsis.permission.model.Permission;
 import edu.austral.ingsis.permission.model.Role;
 import edu.austral.ingsis.permission.repository.PermissionRepository;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Cada cambio de estado deja una linea de log con el snippet involucrado. Quien lo hizo no se
+ * repite aca: va en el contexto de logs (userId) de todo el pedido.
+ */
 @Service
 public class PermissionService {
+
+    private static final Logger LOG = LoggerFactory.getLogger(PermissionService.class);
 
     private final PermissionRepository repository;
     private final Clock clock;
@@ -32,6 +40,7 @@ public class PermissionService {
             throw new AlreadyExistsException("El snippet " + snippetId + " ya tiene dueño");
         }
         repository.save(new Permission(snippetId, userId, Role.OWNER, Instant.now(clock)));
+        LOG.atInfo().addKeyValue("snippetId", snippetId).log("Snippet owner registered");
     }
 
     /** Da permiso de lectura a targetUserId. Solo el dueño puede compartir. */
@@ -43,6 +52,10 @@ public class PermissionService {
                     "El snippet " + snippetId + " ya esta compartido con ese usuario");
         }
         repository.save(new Permission(snippetId, targetUserId, Role.READER, Instant.now(clock)));
+        LOG.atInfo()
+                .addKeyValue("snippetId", snippetId)
+                .addKeyValue("sharedWith", targetUserId)
+                .log("Snippet shared");
     }
 
     /** Snippets a los que el usuario tiene acceso, segun su relacion con ellos. */
@@ -54,9 +67,17 @@ public class PermissionService {
                     case SHARED -> repository.findByUserIdAndRole(userId, Role.READER);
                     case ALL -> repository.findByUserId(userId);
                 };
-        return permissions.stream()
-                .map(p -> new SnippetAccess(p.getSnippetId(), p.getRole()))
-                .toList();
+        List<SnippetAccess> accesses =
+                permissions.stream()
+                        .map(p -> new SnippetAccess(p.getSnippetId(), p.getRole()))
+                        .toList();
+        // Un listado vacio es un 200 igual que uno con datos: el log es lo que permite notar que
+        // a alguien "le desaparecieron" los snippets.
+        LOG.atInfo()
+                .addKeyValue("relation", relation)
+                .addKeyValue("count", accesses.size())
+                .log("Snippets listed");
+        return accesses;
     }
 
     /** Rol del usuario sobre el snippet; NONE si no tiene acceso. */
@@ -73,6 +94,7 @@ public class PermissionService {
     public void deleteSnippet(String snippetId, String userId) {
         requireOwner(snippetId, userId);
         repository.deleteBySnippetId(snippetId);
+        LOG.atInfo().addKeyValue("snippetId", snippetId).log("Snippet permissions deleted");
     }
 
     private void requireOwner(String snippetId, String userId) {
