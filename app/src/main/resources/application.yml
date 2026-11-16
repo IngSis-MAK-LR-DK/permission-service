@@ -22,3 +22,9 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+
+trusted-service:
+  # client_id de la app M2M del handler en Auth0 (la misma AUTH0_SERVICE_CLIENT_ID del handler). Solo
+  # un token pedido por esa app puede registrar dueños (POST /permissions). No es un secreto, pero
+  # no tiene valor por defecto: si falta, el servicio no arranca en vez de dejar el endpoint abierto.
+  client-id: ${AUTH0_SERVICE_CLIENT_ID}

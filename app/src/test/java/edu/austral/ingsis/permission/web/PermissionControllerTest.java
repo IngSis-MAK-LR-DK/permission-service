@@ -3,6 +3,7 @@ package edu.austral.ingsis.permission.web;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -17,6 +18,7 @@ import edu.austral.ingsis.permission.exception.AlreadyExistsException;
 import edu.austral.ingsis.permission.exception.ForbiddenOperationException;
 import edu.austral.ingsis.permission.model.Role;
 import edu.austral.ingsis.permission.security.SecurityConfig;
+import edu.austral.ingsis.permission.security.TrustedServiceVerifier;
 import edu.austral.ingsis.permission.service.PermissionService;
 import edu.austral.ingsis.permission.service.Relation;
 import edu.austral.ingsis.permission.service.SnippetAccess;
@@ -32,10 +34,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(PermissionController.class)
-@Import({SecurityConfig.class, JwtCurrentUser.class})
+@Import({SecurityConfig.class, JwtCurrentUser.class, TrustedServiceVerifier.class})
 class PermissionControllerTest {
 
     private static final String USER = "auth0|ana";
+    private static final String SERVICE_CLIENT = "test-service-client";
 
     @Autowired private MockMvc mockMvc;
 
@@ -44,25 +47,74 @@ class PermissionControllerTest {
     @MockitoBean private JwtDecoder jwtDecoder;
 
     @Test
-    void registerOwnerReturnsCreated() throws Exception {
+    void registerOwnerByTheHandlerReturnsCreated() throws Exception {
+        mockMvc.perform(
+                        post("/permissions")
+                                .with(asService())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"snippetId\":\"s1\",\"ownerId\":\"" + USER + "\"}"))
+                .andExpect(status().isCreated());
+
+        // El dueño es el que viaja en el body, no el sub del token (que es el del servicio).
+        verify(service).registerOwner("s1", USER);
+    }
+
+    @Test
+    void registerOwnerByAUserIsForbidden() throws Exception {
+        // Un usuario autenticado no puede declararse dueño de un snippet, ni siquiera de si mismo.
         mockMvc.perform(
                         post("/permissions")
                                 .with(asUser(USER))
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content("{\"snippetId\":\"s1\"}"))
-                .andExpect(status().isCreated());
+                                .content("{\"snippetId\":\"s1\",\"ownerId\":\"" + USER + "\"}"))
+                .andExpect(status().isForbidden());
 
-        verify(service).registerOwner("s1", USER);
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void registerOwnerByAnotherAppIsForbidden() throws Exception {
+        mockMvc.perform(
+                        post("/permissions")
+                                .with(jwt().jwt(token -> token.claim("azp", "otra-app")))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"snippetId\":\"s1\",\"ownerId\":\"" + USER + "\"}"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void registerOwnerWithoutTokenIsUnauthorized() throws Exception {
+        mockMvc.perform(
+                        post("/permissions")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"snippetId\":\"s1\",\"ownerId\":\"" + USER + "\"}"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(service);
     }
 
     @Test
     void registerOwnerWithBlankSnippetIdIsBadRequest() throws Exception {
         mockMvc.perform(
                         post("/permissions")
-                                .with(asUser(USER))
+                                .with(asService())
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content("{\"snippetId\":\" \"}"))
+                                .content("{\"snippetId\":\" \",\"ownerId\":\"" + USER + "\"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void registerOwnerWithoutOwnerIsBadRequest() throws Exception {
+        mockMvc.perform(
+                        post("/permissions")
+                                .with(asService())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"snippetId\":\"s1\"}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
     }
 
     @Test
@@ -71,9 +123,9 @@ class PermissionControllerTest {
 
         mockMvc.perform(
                         post("/permissions")
-                                .with(asUser(USER))
+                                .with(asService())
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content("{\"snippetId\":\"s1\"}"))
+                                .content("{\"snippetId\":\"s1\",\"ownerId\":\"" + USER + "\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("ya existe"));
     }
@@ -164,5 +216,13 @@ class PermissionControllerTest {
 
     private static JwtRequestPostProcessor asUser(String userId) {
         return jwt().jwt(token -> token.subject(userId));
+    }
+
+    /** Un token pedido por la app M2M del handler: el sub es "<client_id>@clients". */
+    private static JwtRequestPostProcessor asService() {
+        return jwt().jwt(
+                        token ->
+                                token.subject(SERVICE_CLIENT + "@clients")
+                                        .claim("azp", SERVICE_CLIENT));
     }
 }
