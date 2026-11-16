@@ -2,3 +2,4 @@
 # Los tests reemplazan el JwtDecoder con un mock, asi que nunca se contacta a este dominio.
 AUTH0_DOMAIN: test.invalid
 AUTH0_AUDIENCE: https://test-api
+AUTH0_SERVICE_CLIENT_ID: test-service-client

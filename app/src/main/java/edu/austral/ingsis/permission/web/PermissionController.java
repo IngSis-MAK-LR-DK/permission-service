@@ -3,6 +3,7 @@ package edu.austral.ingsis.permission.web;
 import java.util.List;
 
 import edu.austral.ingsis.permission.model.Role;
+import edu.austral.ingsis.permission.security.TrustedServiceVerifier;
 import edu.austral.ingsis.permission.service.PermissionService;
 import edu.austral.ingsis.permission.service.Relation;
 import edu.austral.ingsis.permission.service.SnippetAccess;
@@ -25,16 +26,27 @@ public class PermissionController {
 
     private final PermissionService service;
     private final CurrentUser currentUser;
+    private final TrustedServiceVerifier trustedService;
 
-    public PermissionController(PermissionService service, CurrentUser currentUser) {
+    public PermissionController(
+            PermissionService service,
+            CurrentUser currentUser,
+            TrustedServiceVerifier trustedService) {
         this.service = service;
         this.currentUser = currentUser;
+        this.trustedService = trustedService;
     }
 
+    /**
+     * Solo lo pide el handler, con su token de servicio, al crear un snippet. Si lo pudiera pedir
+     * cualquier usuario autenticado, podria quedarse como dueño de un snippetId que todavia no
+     * tiene dueño.
+     */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public void registerOwner(@Valid @RequestBody RegisterOwnerRequest request) {
-        service.registerOwner(request.snippetId(), currentUser.userId());
+        trustedService.requireTrustedService();
+        service.registerOwner(request.snippetId(), request.ownerId());
     }
 
     @PostMapping("/{snippetId}/share")

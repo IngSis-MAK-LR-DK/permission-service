@@ -27,6 +27,7 @@ class PermissionFlowIntegrationTest {
 
     private static final String ANA = "auth0|ana";
     private static final String BETO = "auth0|beto";
+    private static final String SERVICE_CLIENT = "test-service-client";
 
     @Container @ServiceConnection
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16");
@@ -35,18 +36,20 @@ class PermissionFlowIntegrationTest {
 
     @Test
     void ownerSharesAndDeletesSnippet() throws Exception {
+        // El handler registra a Ana como dueña con su token de servicio.
         mockMvc.perform(
                         post("/permissions")
-                                .with(asUser(ANA))
+                                .with(asService())
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content("{\"snippetId\":\"flow-1\"}"))
+                                .content("{\"snippetId\":\"flow-1\",\"ownerId\":\"" + ANA + "\"}"))
                 .andExpect(status().isCreated());
 
+        // Un snippet con dueño no se puede volver a registrar, ni por el servicio.
         mockMvc.perform(
                         post("/permissions")
-                                .with(asUser(BETO))
+                                .with(asService())
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content("{\"snippetId\":\"flow-1\"}"))
+                                .content("{\"snippetId\":\"flow-1\",\"ownerId\":\"" + BETO + "\"}"))
                 .andExpect(status().isConflict());
 
         mockMvc.perform(
@@ -89,6 +92,22 @@ class PermissionFlowIntegrationTest {
     }
 
     @Test
+    void aUserCannotRegisterThemselvesAsOwnerOfASnippetWithoutOwner() throws Exception {
+        mockMvc.perform(
+                        post("/permissions")
+                                .with(asUser(BETO))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"snippetId\":\"sin-dueno\",\"ownerId\":\""
+                                                + BETO
+                                                + "\"}"))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/permissions/sin-dueno").with(asUser(BETO)))
+                .andExpect(jsonPath("$.role").value("NONE"));
+    }
+
+    @Test
     void requestsWithoutTokenAreRejected() throws Exception {
         mockMvc.perform(get("/permissions/any")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/health")).andExpect(status().isOk());
@@ -96,5 +115,12 @@ class PermissionFlowIntegrationTest {
 
     private static JwtRequestPostProcessor asUser(String userId) {
         return jwt().jwt(token -> token.subject(userId));
+    }
+
+    private static JwtRequestPostProcessor asService() {
+        return jwt().jwt(
+                        token ->
+                                token.subject(SERVICE_CLIENT + "@clients")
+                                        .claim("azp", SERVICE_CLIENT));
     }
 }
