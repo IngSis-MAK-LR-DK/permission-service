@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import edu.austral.ingsis.permission.exception.ForbiddenOperationException;
 import edu.austral.ingsis.permission.observability.RequestIdFilter;
 import edu.austral.ingsis.permission.security.SecurityConfig;
+import edu.austral.ingsis.permission.security.TrustedServiceVerifier;
 import edu.austral.ingsis.permission.service.PermissionService;
 
 import org.junit.jupiter.api.AfterAll;
@@ -35,7 +36,12 @@ import org.springframework.test.web.servlet.MockMvc;
 @WebMvcTest(
         controllers = PermissionController.class,
         properties = "logging.structured.format.console=ecs")
-@Import({SecurityConfig.class, JwtCurrentUser.class, RequestIdFilter.class})
+@Import({
+    SecurityConfig.class,
+    JwtCurrentUser.class,
+    RequestIdFilter.class,
+    TrustedServiceVerifier.class
+})
 @ExtendWith(OutputCaptureExtension.class)
 class StructuredLoggingTest {
 
